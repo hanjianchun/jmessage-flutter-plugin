@@ -1,3 +1,32 @@
+## 0.3.0
+### fix:
++ 1、新增：发送消息透传接口，支持会话间、设备间透传命令；
++ 2、修复经纬度数据错误问题；
+## 0.2.0
+fix:
+    1、新增：消息撤回类型消息；
+    2、修复：Group 和 GroupInfo 属性 maxMemberCount 改为 int 类型；
+    3、修复：获取我的群组 crash
+    
+## 0.1.0
+fix:
+    1、修复：createMessage 方法中经纬度为 int 的错误；
+    2、修复：在 Android 下 GroupInfo 的属性 maxMemberCount 为 int 的错误；
+    3、修复：消息撤回事件回调中 message 为 null 的错误；
+    4、修复：监听不到入群申请通知事件的 bug ;
+## 0.0.20
+fix:
+    1、修改： sendLocationMessage 方法经纬度参数改为 double 类型
+## 0.0.19
+fix:
+    1、修复：Android 接收消息时 flutter 没回调问题
+    2、适配 Android 最新 SDK
+    3、修改代码书写错误
+## 0.0.18
+fix:
+    1、添加 iOS 端 apns 注册方法
+    2、修复：Android 端 serverMessageId 超过 int 存储范围问题；
+    3、更新到最新版本 JMessage SDK
 ## 0.0.17
  fix:
     1、修复IOS发送文件消息获取不到文件问题

@@ -24,12 +24,12 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
 
 @implementation JmessageFlutterPlugin
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
-  FlutterMethodChannel* channel = [FlutterMethodChannel
-      methodChannelWithName:@"jmessage_flutter"
-            binaryMessenger:[registrar messenger]];
-  JmessageFlutterPlugin* instance = [[JmessageFlutterPlugin alloc] init];
-  instance.channel = channel;
-  [registrar addMethodCallDelegate:instance channel:channel];
+    FlutterMethodChannel* channel = [FlutterMethodChannel methodChannelWithName:@"jmessage_flutter" binaryMessenger:[registrar messenger]];
+    JmessageFlutterPlugin* instance = [[JmessageFlutterPlugin alloc] init];
+    instance.channel = channel;
+    
+    [registrar addApplicationDelegate:instance];
+    [registrar addMethodCallDelegate:instance channel:channel];
 }
 
 - (instancetype)init {
@@ -309,20 +309,23 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
 
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+  NSLog(@"Action - handleMethodCall:: method =%@",call.method);
   if ([@"getPlatformVersion" isEqualToString:call.method]) {
     result([@"iOS " stringByAppendingString:[[UIDevice currentDevice] systemVersion]]);
   } else if([@"setup" isEqualToString:call.method]) {
     [self setup:call result:result];
   } else if([@"setDebugMode" isEqualToString:call.method]) {
     [self setDebugMode:call result:result];
+  } else if([@"applyPushAuthority" isEqualToString:call.method]) {
+      [self applyPushAuthority:call result:result];
+  } else if([@"setBadge" isEqualToString:call.method]) {
+      [self setBadge:call result:result];
   } else if([@"userRegister" isEqualToString:call.method]) {
     [self userRegister:call result:result];
   } else if([@"login" isEqualToString:call.method]) {
     [self login:call result:result];
   } else if([@"logout" isEqualToString:call.method]) {
     [self logout:call result:result];
-  } else if([@"setBadge" isEqualToString:call.method]) {
-    [self setBadge:call result:result];
   } else if([@"getMyInfo" isEqualToString:call.method]) {
     [self getMyInfo:call result:result];
   } else if([@"getUserInfo" isEqualToString:call.method]) {
@@ -489,9 +492,15 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
     [self processApplyJoinGroup:call result:result];
   } else if([@"dissolveGroup" isEqualToString:call.method]) {
     [self dissolveGroup:call result:result];
-  } else {
+  } else if([call.method isEqualToString:@"sendMessageTransCommand"]) {
+      [self sendMessageTransCommand:call result:result];
+  } else if([call.method isEqualToString:@"sendCrossDeviceTransCommand"]){
+      [self sendCrossDeviceTransCommand:call result:result];
+  }else {
     result(FlutterMethodNotImplemented);
   }
+    
+    
 }
 
 - (void)setup:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -538,6 +547,39 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
   } else {
     [JMessage setLogOFF];
   }
+}
+
+- (void)applyPushAuthority:(FlutterMethodCall*)call result:(FlutterResult)result {
+
+    BOOL isAboveIos8 = NO;
+    if ([[UIDevice currentDevice].systemVersion floatValue] >= 8.0) {
+        isAboveIos8 = YES;
+    }
+    NSDictionary *arguments = call.arguments;
+    UIUserNotificationType types = 0;
+    if ([arguments[@"sound"] boolValue]) {
+        types |= isAboveIos8 ? UIUserNotificationTypeSound : UIRemoteNotificationTypeSound;
+    }
+    if ([arguments[@"alert"] boolValue]) {
+        types |= isAboveIos8 ? UIUserNotificationTypeAlert : UIRemoteNotificationTypeAlert;
+    }
+    if ([arguments[@"badge"] boolValue]) {
+        types |= isAboveIos8 ? UIUserNotificationTypeBadge : UIRemoteNotificationTypeBadge;
+    }
+    [JMessage registerForRemoteNotificationTypes:types categories:nil];
+}
+
+- (void)setBadge:(FlutterMethodCall*)call result:(FlutterResult)result {
+    NSDictionary *param = call.arguments;
+    NSNumber *badge = param[@"badge"];
+    
+    [[UIApplication sharedApplication] setApplicationIconBadgeNumber:badge.integerValue];
+    [JMessage setBadge:badge.integerValue > 0 ? badge.integerValue: 0];
+    result(nil);
+}
+
+- (void)clearAllNotifications:(FlutterMethodCall*)call result:(FlutterResult)result {
+    [[UIApplication sharedApplication] setApplicationIconBadgeNumber: 0];
 }
 
 - (void)userRegister:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -607,7 +649,7 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
     // 为了和 Android 行为一致，在登录的时候自动下载缩略图。
     [myInfo thumbAvatarData:^(NSData *data, NSString *objectId, NSError *error) {
       // 下载失败也及时返回。
-      result(nil);
+      result([myInfo userToDictionary]);
     }];
   }];
 }
@@ -624,11 +666,7 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
   }];
 }
 
-- (void)setBadge:(FlutterMethodCall*)call result:(FlutterResult)result {
-  NSDictionary *param = call.arguments;
-  [JMessage setBadge:[param[@"badge"] integerValue]];
-  result(nil);
-}
+
 
 
 - (void)getMyInfo:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -1389,8 +1427,10 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
       result([error flutterError]);
       return;
     }
-    
-    NSArray *groudIdList = resultObject;
+    NSMutableArray *groudIdList = [NSMutableArray array];
+    for (NSNumber *gid in resultObject) {
+        [groudIdList addObject:[NSString stringWithFormat:@"%@",gid]];
+    }
     result(groudIdList);
   }];
 }
@@ -2388,23 +2428,82 @@ typedef void (^JMSGConversationCallback)(JMSGConversation *conversation,NSError 
   }];
 }
 
+- (void)sendMessageTransCommand:(FlutterMethodCall*)call result:(FlutterResult)result {
+    NSDictionary *param = call.arguments;
+    NSString *message = param[@"message"];
+    [self getConversationWithDictionary:param callback:^(JMSGConversation *conversation, NSError *error) {
+        if (error) {
+            result([error flutterError]);
+            return ;
+        }
+        [conversation sendTransparentMessage:message completionHandler:^(id resultObject, NSError *error) {
+            if (error) {
+                result([error flutterError]);
+                return;
+            }
+            result(nil);
+        }];
+    }];
+}
+- (void)sendCrossDeviceTransCommand:(FlutterMethodCall*)call result:(FlutterResult)result {
+    NSDictionary *param = call.arguments;
+    NSString *message = param[@"message"];
+    NSString *platform = param[@"platform"];//android,ios,windows,web,all;
+    JMSGPlatformType platformType = kJMSGPlatformTypeAll;
+    if ([platform isEqualToString:@"android"]) {
+        platformType = kJMSGPlatformTypeAndroid;
+    }else if ([platform isEqualToString:@"ios"]) {
+        platformType = kJMSGPlatformTypeiOS;
+    }else if ([platform isEqualToString:@"windows"]) {
+        platformType = kJMSGPlatformTypeWindows;
+    }else if ([platform isEqualToString:@"web"]) {
+        platformType = kJMSGPlatformTypeWeb;
+    }else{//all
+        platformType = kJMSGPlatformTypeAll;
+    }
+    [JMessage sendCrossDeviceTransMessage:message platform:platformType handler:^(id resultObject, NSError *error) {
+        if (error) {
+            result([error flutterError]);
+            return;
+        }
+        result(nil);
+    }];
+}
 
 #pragma mark - AppDelegate
 
-- (BOOL)application:(UIApplication *)application
-didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-  self.launchOptions = launchOptions;
-  return YES;
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    self.launchOptions = launchOptions;
+    
+    return YES;
 }
-
-
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    
+}
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+    [JMessage registerDeviceToken:deviceToken];
+}
 
 #pragma mark - JMessage Event
 
 - (void)onReceiveMessage:(JMSGMessage *)message error:(NSError *)error{
-  NSMutableDictionary *dict = [NSMutableDictionary new];
-  
   [_channel invokeMethod:@"onReceiveMessage" arguments: [message messageToDictionary]];
+}
+- (void)onSendMessageResponse:(JMSGMessage *)message error:(NSError *)error {
+
+    if (!error) {
+        NSLog(@"消息发送成功：%@",message.serverMessageId);
+    }
+  FlutterResult result = self.SendMsgCallbackDic[message.msgId];
+  if (error) {
+    result([error flutterError]);
+    return;
+  }
+  result([message messageToDictionary]);
+}
+
+- (void)onReceiveMessageDownloadFailed:(JMSGMessage *)message{
+  NSLog(@"onReceiveMessageDownloadFailed");
 }
 
 /*!
@@ -2602,19 +2701,7 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
   [_channel invokeMethod:@"onReceiveGroupNicknameChange" arguments: eventDicArr];
 }
 
-- (void)onSendMessageResponse:(JMSGMessage *)message error:(NSError *)error {
 
-  FlutterResult result = self.SendMsgCallbackDic[message.msgId];
-  if (error) {
-    result([error flutterError]);
-    return;
-  }
-  result([message messageToDictionary]);
-}
-
-- (void)onReceiveMessageDownloadFailed:(JMSGMessage *)message{
-  NSLog(@"onReceiveMessageDownloadFailed");
-}
 
 #pragma mark - Conversation 回调
 

@@ -5,10 +5,15 @@ import 'package:flutter/services.dart';
 import 'package:jmessage_flutter/jmessage_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform/platform.dart';
+import 'package:modal_progress_hud/modal_progress_hud.dart';
 
-const String kMockAppkey = '31c7c1b2cf59c1d42895a782';
+import 'package:jmessage_flutter_example/group_manage_view.dart';
+import 'package:jmessage_flutter_example/conversation_manage_view.dart';
+
+const String kMockAppkey =  "你自己应用的 AppKey";//'你自己应用的 AppKey';
 const String kMockUserName = '0001';
 const String kMockPassword = '1111';
+const String kCommonPassword = '123456a';
 
 const String kMockGroupName = 'TESTGroupName';
 const String kMockGroupDesc = 'TESTGroupDecs';
@@ -40,144 +45,204 @@ MethodChannel channel= MethodChannel('jmessage_flutter');
 
 void main() => runApp(new MyApp());
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   @override
-  _MyAppState createState() => new _MyAppState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Flutter Demo',
+      home: MyHomePage(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
+// 我要展示的 home page 界面，这是个有状态的 widget
+class MyHomePage extends StatefulWidget {
+
+  @override
+  _MyHomePageState createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
   String _platformVersion = 'Unknown';
 
   @override
   void initState() {
     super.initState();
+    print("demo manin init state");
     // initPlatformState();
     
     jmessage..setDebugMode(enable: true);
     jmessage.init(isOpenMessageRoaming: true, appkey: kMockAppkey);
-    // testAPIs();
-    // testMediaAPis();s
-    // print('setup jmessage');
-//    testGetHistorMessage();
+    jmessage.applyPushAuthority(
+        new JMNotificationSettingsIOS(
+            sound: true,
+            alert: true,
+            badge: true)
+    );
+    addListener();
   }
 
-
-  void register1() async {
-    // 注册0001
-    await jmessage.userRegister(username: kMockUserName, password: kMockPassword,nickname: "shikk1");
-    await jmessage.login(username: kMockUserName, password: kMockPassword);
-    await jmessage.updateMyInfo(gender:JMGender.female,extras: {"realName":"0001","age:":1,"student":false});
+  void demoShowMessage(bool isShow, String msg) {
+    setState(() {
+      _loading = isShow;
+      _result = msg ?? "";
+    });
   }
 
-  void register2() async{
-    // 注册0002
-    await jmessage.userRegister(username: "0002", password: kMockPassword,nickname: "shikk2");
-    await jmessage.login(username: "0002", password: kMockPassword);
-    await jmessage.updateMyInfo(gender: JMGender.male,extras: {"realName":"0002","age:":2,"student":true});
-  }
+  void demoRegisterAction() async {
+    print("registerAction : " + usernameTextEC1.text);
 
-  void getUserinfo(){
-    jmessage.getUserInfo(username: "0001");
-  }
-
-  // 测试0001收到的历史消息
-  void testGetHistorMessage() async{
-    await jmessage.login(username: "0001", password: kMockPassword);
-    JMSingle msg = JMSingle.fromJson({"username":"0002"});
-    jmessage.getHistoryMessages(type: msg, from: 0, limit: 10).then((msgList){
-      for(JMNormalMessage msg in msgList){
-        print("shikk history msg ::   ${msg.toJson()}");
-      }
+    setState(() {
+      _loading = true;
     });
 
+    if (usernameTextEC1.text == null || usernameTextEC1.text == "") {
+      setState(() {
+        _loading = false;
+        _result = "【注册】username 不能为空";
+      });
+      return;
+    }
+    String name = usernameTextEC1.text;
+
+    await jmessage.userRegister(username: name, password: kCommonPassword, nickname: name);
+
+    setState(() {
+      _loading = false;
+    });
   }
 
-  // 0002 向 0001 发消息
-  void testSendCustomMsg() async{
-    await jmessage.login(username: "0002", password: kMockPassword);
-    JMSingle msg = JMSingle.fromJson({"username":"0001"});
-    JMCustomMessage customMsg = await jmessage.createMessage(type: JMMessageType.custom, targetType: msg,customObject: {"aa":"aa","bb":"bb"});
-    jmessage.sendCustomMessage(type: msg, customObject: customMsg.toJson());
+  void demoLoginUserAction() async {
+    print("loginUserAction : " + usernameTextEC1.text);
+
+    setState(() {
+      _loading = true;
+    });
+
+    if (usernameTextEC1.text == null || usernameTextEC1.text == "") {
+      setState(() {
+        _loading = false;
+        _result = "【登录】username 不能为空";
+      });
+      return;
+    }
+    String name = usernameTextEC1.text;
+    JMUserInfo u = await jmessage.login(username: name, password: kCommonPassword);
+    setState(() {
+      _loading = false;
+      if (u == null){
+        _result = "【登录后】";
+      }else{
+        _result = "【登录后】${u.toJson()}";
+      }
+    });
   }
 
-  // 0002 向 0001 发文字消息
-  int index = 0;
-  void testSendTextMsg() async{
-    await jmessage.login(username: "0002", password: kMockPassword);
-    JMSingle msg = JMSingle.fromJson({"username":"0001"});
-    jmessage.sendTextMessage(type: msg,text: "msg queen index $index");
-    index ++;
+  void demoLogoutAction() async {
+    print("demoLogoutAction : ");
+
+    setState(() {
+      _loading = true;
+    });
+
+    await jmessage.logout()
+        .then((onValue) {
+          print("demoLogoutAction : then");
+          demoShowMessage(false, "【已退出】");
+          },
+        onError: (onError) {
+          print("demoLogoutAction : onError $onError");
+          demoShowMessage(false, onError.toString());
+        });
   }
+
+  void demoGetCurrentUserInfo() async {
+    print("demoGetCurrentUserInfo : ");
+
+    setState(() {
+      _loading = true;
+    });
+    JMUserInfo u = await jmessage.getMyInfo();
+
+    setState(() {
+      _loading = false;
+      if (u == null) {
+        _result = " ===== 您还未登录账号 ===== \n【获取登录用户信息】null";
+      }else{
+        _result = " ===== 您已经登录 ===== \n【获取登录用户信息】${u.toJson()}";
+      }
+    });
+  }
+
+
+  int textIndex = 0;
+  void demoSendTextMessage() async {
+    print("demoSendTextMessage" + usernameTextEC2.text);
+
+    setState(() {
+      _loading = true;
+    });
+
+    if (usernameTextEC2.text == null || usernameTextEC2.text == "") {
+      setState(() {
+        _loading = false;
+        _result = "【发消息】对方 username 不能为空";
+      });
+      return;
+    }
+    String name = usernameTextEC2.text;
+
+    JMSingle type = JMSingle.fromJson({"username":name});
+    JMTextMessage msg = await jmessage.sendTextMessage(type: type,text: "send msg queen index $textIndex");
+    setState(() {
+      _loading = false;
+      _result = "【文本消息】${msg.toJson()}";
+    });
+    textIndex ++;
+  }
+  
+  void demoSendLocationMessage() async {
+    print("demoSendLocationMessage" + usernameTextEC2.text);
+
+    setState(() {
+      _loading = true;
+    });
+
+    if (usernameTextEC2.text == null || usernameTextEC2.text == "") {
+      setState(() {
+        _loading = false;
+        _result = "【发消息】对方 username 不能为空";
+      });
+      return;
+    }
+    String username = usernameTextEC2.text;
+
+    JMSingle type = JMSingle.fromJson({"username":username});
+    JMLocationMessage msg = await jmessage.sendLocationMessage(type: type, latitude: 100.0, longitude: 200.0, scale: 1, address: "详细地址");
+    setState(() {
+      _loading = false;
+      _result = "【地理位置消息】${msg.toJson()}";
+    });
+  }
+
 
 
   void addListener() async {
     print('add listener receive ReceiveMessage');
-    await jmessage.login(username: kMockUserName,password: kMockPassword);
-    // jmessage.setNoDisturbGlobal(isNoDisturb: false);
 
     jmessage.addReceiveMessageListener((msg) {//+
-      print('receive ReceiveMessage ${msg.toJson()}');
-      print('receive ReceiveMessage00 ${msg}');
-      testGetHistorMessage();
-      // verifyMessage(msg);
-      if (msg is JMVoiceMessage) {
-        // var type
-        print('send voice message11');
-        jmessage.sendVoiceMessage(
-            type: msg.from.targetType,
-            path: msg.path,
-          ).then((JMVoiceMessage message) {
-            // verifyMessage(message);
-            print('send voice message success ${message.toJson()}');
-          }).catchError((err) {
-            print('send voice error ${err}');
-          });
-      }
-      
-      if (msg is JMImageMessage) {
-        jmessage.sendImageMessage(
-          type: msg.from.targetType,
-          path: msg.thumbPath,
-          
-        ).then((JMImageMessage message) {
-          print('send image success ${message.toJson()}');
-          jmessage.updateMyAvatar(imgPath: msg.thumbPath);
-          jmessage.updateGroupAvatar(
-            id: kMockGroupId,
-            imgPath: msg.thumbPath
-          );
-        }).catchError((err) {
-          print('the error ${err}');
-        });
-      }
+      print('listener receive event - message ： ${msg.toJson()}');
 
-      if (msg is JMFileMessage) {
+      verifyMessage(msg);
 
-        jmessage.downloadFile(
-          target: msg.from.targetType,
-          messageId: msg.id,
-        ).then((Map res) {
-
-          jmessage.sendFileMessage(
-            type: msg.from.targetType,
-            path: res['filePath'],
-            extras: {'fileType': 'video'}
-          ).then((JMFileMessage message) {
-            print('send file success ${message.toJson()}');
-          }).catchError((err) {
-            print('the error ${err}');
-          });
-        }).catchError((err) {
-          print('download file error');
-        });
-      }
-
-      print('send voice message22');
+      setState(() {
+        _result = "【收到消息】${msg.toJson()}";
+      });
     });
-    
+
     jmessage.addClickMessageNotificationListener((msg) {//+
       verifyMessage(msg);
-      print('flutter receive event  receive addClickMessageNotificationListener ${msg.toJson()}');
+      print('listener receive event - click message notification ： ${msg.toJson()}');
     });
 
     jmessage.addSyncOfflineMessageListener((conversation,msgs) {
@@ -185,28 +250,29 @@ class _MyAppState extends State<MyApp> {
       verifyConversation(conversation);
       print('conversation ${conversation}');
       print('messages ${msgs}');
-      
+
       for (dynamic msg in msgs) {
         print('msg ${msg}');
       }
-      print('flutter receive event verify receive offline message done!');
+      print('listener receive event - sync office message done!');
     });
 
     jmessage.addSyncRoamingMessageListener((conversation) {
       verifyConversation(conversation);
-      print('flutter receive event receive roaming message');
+      print('listener receive event - sync roaming message');
     });
 
     jmessage.addLoginStateChangedListener((JMLoginStateChangedType type) {
-      print('flutter receive event receive login state change ${type}');
+      print('listener receive event -  login state change: ${type}');
     });
 
     jmessage.addContactNotifyListener((JMContactNotifyEvent event) {
-      print('flutter receive event contact notify ${event.toJson()}');
+      print('listener receive event - contact notify ${event.toJson()}');
     });
-    
+
     jmessage.addMessageRetractListener((msg) {
-      print('flutter receive event message retract event');
+      print('listener receive event - message retract event');
+      print("${msg.toString()}");
       verifyMessage(msg);
     });
 
@@ -215,7 +281,7 @@ class _MyAppState extends State<MyApp> {
       msgs.map((msg) {
         verifyMessage(msg);
       });
-      print('flutter receive event receive chat room message ');
+      print('listener receive event - chat room message ');
     });
 
     jmessage.addReceiveTransCommandListener((JMReceiveTransCommandEvent event) {
@@ -223,10 +289,11 @@ class _MyAppState extends State<MyApp> {
       expect(event.sender, isNotNull, reason: 'JMReceiveTransCommandEvent.sender is null');
       expect(event.receiver, isNotNull, reason: 'JMReceiveTransCommandEvent.receiver is null');
       expect(event.receiverType, isNotNull, reason: 'JMReceiveTransCommandEvent.receiverType is null');
-      print('flutter receive event receive trans command');
+      print('listener receive event - trans command');
     });
-    
+
     jmessage.addReceiveApplyJoinGroupApprovalListener((JMReceiveApplyJoinGroupApprovalEvent event) {
+      print("listener receive event - apply join group approval");
 
       expect(event.eventId, isNotNull, reason: 'JMReceiveApplyJoinGroupApprovalEvent.eventId is null');
       expect(event.groupId, isNotNull, reason: 'JMReceiveApplyJoinGroupApprovalEvent.groupId is null');
@@ -241,7 +308,7 @@ class _MyAppState extends State<MyApp> {
       expect(event.groupId, isNotNull, reason: 'JMReceiveGroupAdminRejectEvent.groupId is null');
       verifyUser(event.groupManager);
       expect(event.reason, isNotNull, reason: 'JMReceiveGroupAdminRejectEvent.reason is null');
-      print('flutter receive event receive group admin rejected');
+      print('listener receive event - group admin rejected');
     });
     
     jmessage.addReceiveGroupAdminApprovalListener((JMReceiveGroupAdminApprovalEvent event) {
@@ -255,10 +322,9 @@ class _MyAppState extends State<MyApp> {
       for (var user in event.users) {
         verifyUser(user);
       }
-      print('flutter receive event receive group admin approval');
+      print('listener receive event - group admin approval');
 
     });
-    
   }
 
 // addReceiveMessageListener
@@ -957,43 +1023,92 @@ class _MyAppState extends State<MyApp> {
   }
 
 
-  @override
-  Widget build(BuildContext context) {
-    return new MaterialApp(
-      home: new Scaffold(
-        appBar: new AppBar(
-          title: const Text('JMessage Plugin App'),
-        ),
-        body: new Column(
+  Widget _buildContext() {
+    return new GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        FocusScope.of(context).requestFocus(FocusNode());
+      },
+      child: new Container(
+        child: new Column(
           children: <Widget>[
-            new Text('Running Unit test... \n'),
-            new FlatButton(onPressed: (){
-              register1();
-            }, child: new Text("0001 测试注册用户")),
-            new FlatButton(onPressed: (){
-              testGetHistorMessage();
-            }, child: new Text("0001 获取收到的历史消息")),
-            new FlatButton(onPressed: (){
-              addListener();
-            }, child: new Text("0001 添加消息监听")),
-            new Text('============================== \n'),
-            new FlatButton(onPressed: (){
-              register2();
-            }, child: new Text("0002 测试注册用户")),
-            new FlatButton(onPressed: (){
-              testSendCustomMsg();
-            }, child: new Text("0002 测试向0001 发送自定义消息")),
-            new FlatButton(onPressed: (){
-              testSendTextMsg();
-            }, child: new Text("0002 测试向0001 发送文字消息")),
-
-
+            new Container(
+              margin: EdgeInsets.fromLTRB(5, 10, 5, 0),
+              height: 35,
+              color: Colors.brown,
+              child: new CustomTextField(hintText: "请输入登录的 username", controller: usernameTextEC1),
+            ),
+            new Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                new Text(" "),
+                new CustomButton(title: "注册", onPressed: demoRegisterAction),
+                new Text(" "),
+                new CustomButton(title: "登录",onPressed: demoLoginUserAction),
+                new Text(" "),
+                new CustomButton(title: "用户信息", onPressed: demoGetCurrentUserInfo),
+                new Text(" "),
+                new CustomButton(title: "退出", onPressed: demoLogoutAction),
+              ],
+            ),
+            new Container(
+              margin: EdgeInsets.fromLTRB(5, 0, 5, 0),
+              height: 35,
+              color: Colors.brown,
+              child: new CustomTextField(hintText: "请输入username", controller: usernameTextEC2),
+            ),
+            new Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                new Text(" "),
+                new CustomButton(title: "发送文本消息", onPressed: demoSendTextMessage),
+                new Text(" "),
+                new CustomButton(title: "发送位置消息", onPressed:demoSendLocationMessage),
+              ],
+            ),
+            new Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                new Text(" "),
+                new CustomButton(title: "会话管理界面",onPressed: (){
+                  Navigator.push(context, new MaterialPageRoute(builder: (context) => new ConversationManageView()));
+                }),
+                new Text(" "),
+                new CustomButton(title: "群组管理界面", onPressed: (){
+                    Navigator.push(context, new MaterialPageRoute(builder: (context) => new GroupManageView()));
+                  },
+                ),
+              ],
+            ),
+            new Container(
+              margin: EdgeInsets.fromLTRB(5, 5, 5, 0),
+              color: Colors.brown,
+              child: Text(_result),
+              width: double.infinity,
+              height: 200,
+            ),
           ],
         ),
       ),
     );
   }
+
+  bool _loading = false;
+  String _result = "展示信息栏";
+  var usernameTextEC1 = new TextEditingController();
+  var usernameTextEC2 = new TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return new Scaffold(
+      appBar: new AppBar(
+        title: const Text('JMessage Plugin App'),
+      ),
+      body: ModalProgressHUD(child: _buildContext(), inAsyncCall: _loading),
+    );
+  }
 }
+
 
 
 void verifyUser(JMUserInfo user) {
@@ -1060,5 +1175,54 @@ void verifyMessage(dynamic msg) {
   }
   if (msg.target is JMGroupInfo) {
     verifyGroupInfo(msg.target);
+  }
+}
+
+/// 封装控件
+class CustomButton extends StatelessWidget {
+
+  final VoidCallback onPressed;
+  final String title;
+
+  const CustomButton({@required this.onPressed, @required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return new FlatButton(
+      onPressed: onPressed,
+      child: new Text("$title"),
+      color: Color(0xff585858),
+      highlightColor: Color(0xff888888),
+      splashColor: Color(0xff888888),
+      textColor: Colors.white,
+      //padding: EdgeInsets.fromLTRB(5, 5, 5, 5),
+    );
+  }
+}
+
+class CustomTextField extends StatelessWidget {
+
+  final String hintText;
+  final TextEditingController controller ;
+
+  const CustomTextField({@required this.hintText, @required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return new Container(
+      margin: EdgeInsets.fromLTRB(5, 10, 5, 0),
+      height: 35,
+      color: Colors.brown,
+      child: new TextField(
+        autofocus: false,
+        style: TextStyle(color: Colors.black),
+        decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: TextStyle(color: Colors.black)
+        ),
+        controller: controller,
+      ),
+    );
   }
 }

@@ -16,6 +16,25 @@ String getStringFromEnum<T>(T) {
   return T.toString().split('.').last;
 }
 
+/// iOS 通知设置项
+class JMNotificationSettingsIOS {
+  final bool sound;
+  final bool alert;
+  final bool badge;
+
+  const JMNotificationSettingsIOS ({
+    this.sound = true,
+    this.alert = true,
+    this.badge = true,
+  });
+
+  Map<String, dynamic> toMap() {
+    return <String, bool>{'sound': sound, 'alert': alert, 'badge': badge};
+  }
+}
+
+/// 点击通知栏
+
 // message 和 retractedMessage 可能是 JMTextMessage | JMVoiceMessage | JMImageMessage | JMFileMessage | JMEventMessage | JMCustomMessage;
 typedef JMMessageEventListener = void Function(dynamic message);
 typedef JMSyncOfflineMessageListener = void Function(JMConversationInfo conversation, List<dynamic> messageArray);
@@ -147,6 +166,7 @@ class JmessageFlutter {
     }
     
     Future<void> _handleMethod(MethodCall call) async {
+      print("handleMethod method = ${call.method}");
       switch (call.method) {
         case 'onReceiveMessage':
           for (JMMessageEventListener cb in _eventHanders.receiveMessage) {
@@ -168,7 +188,15 @@ class JmessageFlutter {
           for (JMSyncOfflineMessageListener cb in _eventHanders.syncOfflineMessage) {
             Map param = call.arguments.cast<dynamic, dynamic>();
             List msgDicArray = param['messageArray'];
-            List<dynamic> msgs = msgDicArray.map((json) => JMNormalMessage.generateMessageFromJson(json)).toList();
+//            List<dynamic> msgs = msgDicArray.map((json) => JMNormalMessage.generateMessageFromJson(json)).toList();
+
+            List<dynamic> msgs = [];
+            for (Map json in msgDicArray) {
+              print("offline message: ${json.toString()}");
+              JMNormalMessage normsg = JMNormalMessage.generateMessageFromJson(json);
+              msgs.add(normsg);
+            }
+
             cb(JMConversationInfo.fromJson(param['conversation']), msgs);
           }
           break;
@@ -194,7 +222,8 @@ class JmessageFlutter {
         case 'onReceiveTransCommand':
           for (JMReceiveTransCommandListener cb in _eventHanders.receiveTransCommand) {
             Map json = call.arguments.cast<dynamic, dynamic>();
-            cb(JMReceiveTransCommandEvent.fromJson(json));
+            JMReceiveTransCommandEvent ev = JMReceiveTransCommandEvent.fromJson(json);
+            cb(ev);
           }
           break;
         case 'onReceiveChatRoomMessage':
@@ -207,7 +236,8 @@ class JmessageFlutter {
         case 'onReceiveApplyJoinGroupApproval':
           for (JMReceiveApplyJoinGroupApprovalListener cb in _eventHanders.receiveApplyJoinGroupApproval) {
             Map json = call.arguments.cast<dynamic, dynamic>();
-            cb(JMReceiveApplyJoinGroupApprovalEvent.fromJson(json));
+            JMReceiveApplyJoinGroupApprovalEvent e = JMReceiveApplyJoinGroupApprovalEvent.fromJson(json);
+            cb(e);
           }
           break;
         case 'onReceiveGroupAdminReject':
@@ -248,38 +278,23 @@ class JmessageFlutter {
     _channel.invokeMethod('setDebugMode', {'enable': enable});
   }
 
-  Future<void> userRegister({
-      @required String username, 
-      @required String password, 
-      String nickname
-    }) async {
-      await _channel.invokeMethod('userRegister', {
-        'username': username,
-        'password': password,
-        'nickname': nickname
-      });
-    }
+  ///
+  /// 申请推送权限，注意这个方法只会向用户弹出一次推送权限请求（如果用户不同意，之后只能用户到设置页面里面勾选相应权限），需要开发者选择合适的时机调用。
+  ///
+  void applyPushAuthority([JMNotificationSettingsIOS iosSettings = const JMNotificationSettingsIOS()]) {
 
-  Future<void> login({
-    @required String username,
-    @required String password,
-  }) async {
-    if (username == null ||
-        password == null) {
-      throw("username or password was passed null");
+    if (!_platform.isIOS) {
+      return;
     }
-    await _channel.invokeMethod('login', {
-      'username': username,
-      'password': password
-    });
-    return;
+    _channel.invokeMethod('applyPushAuthority', iosSettings.toMap());
   }
 
-  Future<void> logout() async {
-    await _channel.invokeMethod('logout');
-    return;
-  }
-
+  ///
+  /// iOS Only
+  /// 设置应用 Badge（小红点）
+  ///
+  /// @param {Int} badge
+  ///
   Future<void> setBadge({
     @required int badge
   }) async {
@@ -289,9 +304,56 @@ class JmessageFlutter {
     return;
   }
 
+  Future<void> userRegister({
+      @required String username, 
+      @required String password, 
+      String nickname
+    }) async {
+      print("Action - userRegister: username=$username,pw=$password");
+      await _channel.invokeMethod('userRegister', {
+        'username': username,
+        'password': password,
+        'nickname': nickname
+      });
+    }
+
+  Future<JMUserInfo> login({
+    @required String username,
+    @required String password,
+  }) async {
+    if (username == null ||
+        password == null) {
+      throw("username or password was passed null");
+    }
+    print("Action - login: username=$username,pw=$password");
+
+    Map userJson = await _channel.invokeMethod('login', {
+      'username': username,
+      'password': password
+    });
+    if (userJson == null) {
+      return null;
+    }else{
+      return JMUserInfo.fromJson(userJson);
+    }
+
+
+  }
+
+  Future<void> logout() async {
+    await _channel.invokeMethod('logout');
+  }
+
+
+
   Future<JMUserInfo> getMyInfo() async {
     Map userJson = await _channel.invokeMethod('getMyInfo');
-    return JMUserInfo.fromJson(userJson);
+    if (userJson == null) {
+      return null;
+    }else{
+      return JMUserInfo.fromJson(userJson);
+    }
+
   }
 
   Future<JMUserInfo> getUserInfo({
@@ -396,15 +458,13 @@ class JmessageFlutter {
     String path,
     String fileName,
     Map<dynamic, dynamic> customObject,
-    int latitude,
-    int longitude,
-    num scale,
+    double latitude,
+    double longitude,
+    int scale,
     String address,
     Map<dynamic, dynamic> extras,
   }) async {
     Map param = targetType.toJson();
-    
-    
     
     if (extras != null) {
       param..addAll({'extras': extras});
@@ -550,9 +610,9 @@ class JmessageFlutter {
 
   Future<JMLocationMessage> sendLocationMessage({
     @required dynamic type, /// (JMSingle | JMGroup | JMChatRoom)
-    @required int latitude,
-    @required int longitude,
-    @required num scale,
+    @required double latitude,
+    @required double longitude,
+    @required int scale,
     String address,
     JMMessageSendOptions sendOption,
     Map<dynamic, dynamic> extras,
@@ -611,8 +671,10 @@ class JmessageFlutter {
     @required String messageId,
   }) async {
     Map param = type.toJson();
-    
+
     param..addAll({'messageId': messageId});
+
+    print("retractMessage: ${param.toString()}");
 
     await _channel.invokeMethod('retractMessage', 
       param..removeWhere((key,value) => value == null));
@@ -636,7 +698,17 @@ class JmessageFlutter {
 
     List resArr = await _channel.invokeMethod('getHistoryMessages', 
       param..removeWhere((key,value) => value == null));
-    var res = resArr.map((messageMap) => JMNormalMessage.generateMessageFromJson(messageMap)).toList();
+
+    List res = [];
+    for (Map messageMap in resArr) {
+      dynamic d = JMNormalMessage.generateMessageFromJson(messageMap);
+      if (d != null) {
+        res.add(d);
+      }else{
+        print("get history msg, get a message is null");
+      }
+    }
+    //var res = resArr.map((messageMap) => JMNormalMessage.generateMessageFromJson(messageMap)).toList();
     return res;
   }
 
@@ -1330,8 +1402,43 @@ class JmessageFlutter {
     
     return;
   }
+
+  /// 会话间透传命令，只支持 single、group，不支持 chatRoom
+  Future<void> sendMessageTransCommand({
+    @required String message,
+    @required dynamic target, //(JMSingle | JMGroup)
+  }) async {
+      if (target is JMChatRoom) {
+        print("does not support chatroom message trans.");
+        return;
+      }
+
+      Map param = target.toJson();
+      param["message"] = message;
+      param.removeWhere((key, value) => value == null);
+
+      await _channel.invokeMethod('sendMessageTransCommand',param);
+  }
+
+  /// 设备间透传命令
+  Future<void> sendCrossDeviceTransCommand({
+    @required String message,
+    @required JMPlatformType platform,
+  }) async {
+
+    Map param = Map();
+    param["message"] = message;
+    param["type"] = getStringFromEnum(platform);
+    param.removeWhere((key, value) => value == null);
+
+    await _channel.invokeMethod('sendCrossDeviceTransCommand',param);
+  }
+
 }
 
+enum JMPlatformType {
+  android,ios,windows,web,all
+}
 enum JMConversationType {
   single, group, chatRoom
 }
@@ -1439,7 +1546,7 @@ class JMMessageSendOptions {
   }
 
   JMMessageSendOptions.fromJson(Map<dynamic, dynamic> json)
-    : isShowNotification = json['roomId'],
+    : isShowNotification = json['isShowNotification'],
       isRetainOffline = json['isRetainOffline'],
       isCustomNotificationEnabled = json['isCustomNotificationEnabled'],
       notificationTitle = json['notificationTitle'],
@@ -1622,12 +1729,15 @@ class JMNormalMessage {
           case JMMessageType.event:
             return JMEventMessage.fromJson(json);
             break;
+          case JMMessageType.prompt:
+            return JMPromptMessage.fromJson(json);
+            break;
         }
       }
 }
 
 enum JMMessageType {
-  text, image, voice, file, custom, location, event
+  text, image, voice, file, custom, location, event,prompt
 }
 
 class JMTextMessage extends JMNormalMessage {
@@ -1692,9 +1802,9 @@ class JMFileMessage extends JMNormalMessage {
 }
 
 class JMLocationMessage extends JMNormalMessage {
-  num longitude;  // 经度
-  num latitude;   // 纬度
-  num scale;      // 地图缩放比例
+  double longitude;  // 经度
+  double latitude;   // 纬度
+  int scale;      // 地图缩放比例
   String address; // 详细地址
 
   Map toJson() {
@@ -1729,6 +1839,21 @@ class JMCustomMessage extends JMNormalMessage {
       super.fromJson(json);
 }
 
+
+class JMPromptMessage extends JMNormalMessage {
+  String promptText;
+
+  Map toJson() {
+    var json = super.toJson();
+    json["promptText"] = promptText;
+    return json;
+  }
+
+  JMPromptMessage.fromJson(Map<dynamic, dynamic> json)
+      :promptText = json["promptText"],
+        super.fromJson(json);
+}
+
 enum JMEventType {
   group_member_added, group_member_removed, group_member_exit
 }
@@ -1750,6 +1875,8 @@ class JMEventMessage extends JMNormalMessage {
       usernames = json['usernames'],
       super.fromJson(json);
 }
+
+
 
 enum JMLoginStateChangedType {
   user_password_change, user_logout, user_deleted, user_login_status_unexpected, user_kicked
@@ -1797,18 +1924,18 @@ class JMReceiveTransCommandEvent {
   }
 
   JMReceiveTransCommandEvent.fromJson(Map<dynamic, dynamic> json)
-    : receiverType = getEnumFromString(JMTargetType.values, json['receiverType']),
-      message = json['message'],
-      sender = json['sender'] {
-        switch (receiverType) {
-          case JMTargetType.user:
-            receiver = JMUserInfo.fromJson(json['receiver']);
-            break;
-          case JMTargetType.group:
-            receiver = JMGroupInfo.fromJson(json['receiver']);
-            break;
-        }
-      }
+      :receiverType = getEnumFromString(JMTargetType.values, json['receiverType']),
+        message = json['message'],
+        sender = JMUserInfo.fromJson(json['sender']) {
+          switch (receiverType) {
+            case JMTargetType.user:
+                receiver = JMUserInfo.fromJson(json['receiver']);
+              break;
+            case JMTargetType.group:
+              receiver = JMGroupInfo.fromJson(json['receiver']);
+              break;
+    }
+  }
 }
 
 class JMReceiveApplyJoinGroupApprovalEvent {
@@ -2002,6 +2129,15 @@ class JMConversationInfo {
   dynamic latestMessage; // 最近的一条消息对象。如果不存在消息，则 conversation 对象中没有该属性。
   Map<dynamic, dynamic> extras;
 
+  Map toJson() {
+    return {
+      'title': title,
+      'conversationType': getStringFromEnum(conversationType),
+      'unreadCount': unreadCount,
+      'extras': extras.toString(),
+    };
+  }
+
   JMConversationInfo.fromJson(Map<dynamic, dynamic> json)
     : conversationType = getEnumFromString(JMConversationType.values, json['conversationType']),
       title = json['title'],
@@ -2095,9 +2231,9 @@ class JMConversationInfo {
   }
   // sendLocation
   Future<JMLocationMessage> sendLocationMessage({
-    @required int latitude,
-    @required int longitude,
-    @required num scale,
+    @required double latitude,
+    @required double longitude,
+    @required int scale,
     String address,
     JMMessageSendOptions sendOption,
     Map<dynamic, dynamic> extras,
